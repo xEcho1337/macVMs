@@ -1,7 +1,7 @@
 # macVMs
 
 macVMs is a small CLI tool to manage QEMU virtual machines.
-It is designed to simplify the creation and usage of fully emulated x86 VMs, especially on ARM-based MacBooks.
+It is designed to simplify the creation and usage of fully emulated x86(-64) VMs, especially on ARM-based MacBooks.
 
 The interface is interactive and menu-driven, so no manual QEMU commands are required.
 
@@ -90,8 +90,16 @@ If configured, a host directory is exposed to the VM using QEMU 9p.
 Inside the guest, mount it manually:
 
 ```bash
-mkdir /mnt/shared
-mount -t 9p -o trans=virtio shared /mnt/shared
+sudo mkdir /mnt/shared
+sudo mount -t 9p -o trans=virtio shared /mnt/shared
+```
+
+To automatically mount at each startup:
+
+```bash
+sudo mkdir /mnt/shared
+echo 'shared /mnt/shared 9p trans=virtio,version=9p2000.L,rw 0 0' | sudo tee -a /etc/fstab
+sudo mount -a
 ```
 
 The mount point can be changed as needed.
