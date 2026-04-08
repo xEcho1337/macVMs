@@ -161,6 +161,8 @@ def build_start_qemu_cmd(config, disk):
         "-smp", str(config["cpu"]),
         "-cpu", "qemu64",
         "-drive", f"file={disk},format=qcow2",
+        "-netdev", "user,id=net0,hostfwd=tcp::2222-:22",
+        "-device", "e1000,netdev=net0"
     ]
     qemu_cmd += qemu_headless_args()
     qemu_cmd += build_shared_args(config.get("shared_folder"))
