@@ -1,7 +1,7 @@
 # macVMs
 
 macVMs is a small CLI tool to manage QEMU virtual machines.
-It is designed to simplify the creation and usage of fully emulated x86(-64) VMs, especially on ARM-based MacBooks.
+It is designed to simplify the creation and usage of fully emulated x86 and x86_64 VMs, especially on ARM-based MacBooks.
 
 The interface is interactive and menu-driven, so no manual QEMU commands are required.
 
@@ -68,8 +68,6 @@ The tool will automatically:
 
 The installer now boots directly on the serial console in headless mode.
 
-For Debian, the tool also writes persistent GRUB serial settings during installation so subsequent boots remain visible in the terminal.
-
 Ubuntu is started in serial-friendly installer mode too. When the installer reaches the final "remove installation medium" prompt, `macVMs` closes the temporary install session automatically so you can boot the installed system cleanly with `Start VM`.
 
 ## Recommended setup
@@ -103,6 +101,21 @@ sudo mount -a
 ```
 
 The mount point can be changed as needed.
+
+## Remote connection
+
+This step is optional but recommended for a smoother workflow.
+
+You can setup a remote connection to the VM for faster access, similar to **WSL**.
+
+- `scripts/install-macvms.sh` - Adds the `macvms` command to your terminal for instant login
+- `scripts/setup-ssh.sh` - Sets up SSH keys to avoid entering the password each time (included in the previous command)
+
+#### Prerequisites
+1. A working VM obviously
+2. Install and enable SSH inside the VM
+3. Set a password for the root account
+4. Allow root login via SSH
 
 ## Notes
 

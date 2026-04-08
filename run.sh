@@ -1,1 +1,2 @@
-python3 macvms.py
+source .venv/bin/activate
+python macvms.py

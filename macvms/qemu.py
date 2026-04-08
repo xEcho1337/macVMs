@@ -12,18 +12,6 @@ from pathlib import Path
 from .config import DEBIAN_PRESEED_TEMPLATE, ISOS, boot_cache_dir, seed_dir
 from .ui import console
 
-ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-KERNEL_TIMESTAMP_RE = re.compile(r"^\[\s*\d+\.\d+\]\s*")
-UBUNTU_NOISY_PREFIXES = (
-    "raid6:",
-    "xor:",
-)
-UBUNTU_NOISY_SUBSTRINGS = (
-    "MB/sec",
-    "recovery algorithm",
-    "software checksum speed",
-)
-
 
 def build_shared_args(shared_path):
     if not shared_path:
@@ -131,23 +119,9 @@ def build_install_qemu_cmd(name, os_name, ram, cpu, disk, shared_path):
         "-cdrom", ISOS[os_name]["file"],
         "-kernel", kernel_path,
         "-initrd", initrd_path,
+        "-append", " ".join(ISOS[os_name]["boot"]["append"]),
     ]
 
-    append_args = list(ISOS[os_name]["boot"]["append"])
-
-    if os_name == "debian":
-        seed_path = write_debian_preseed(name, shared_path)
-        qemu_cmd += [
-            "-drive", f"file=fat:rw:{seed_path},format=raw,if=virtio,media=disk",
-        ]
-        append_args = [
-            "auto=true",
-            "priority=critical",
-            "preseed/file=/hd-media/preseed.cfg",
-            *append_args,
-        ]
-
-    qemu_cmd += ["-append", " ".join(append_args)]
     qemu_cmd += qemu_headless_args()
     qemu_cmd += build_shared_args(shared_path)
     return qemu_cmd
@@ -173,38 +147,7 @@ def has_persistent_serial_support(config):
     return config.get("serial_bootstrap_version", 0) >= 1
 
 
-def is_noisy_ubuntu_line(line):
-    plain = ANSI_ESCAPE_RE.sub("", line.replace("\r", "")).lstrip()
-    if not plain:
-        return False
-
-    without_timestamp = KERNEL_TIMESTAMP_RE.sub("", plain).strip()
-    if without_timestamp != plain.strip():
-        if not without_timestamp:
-            return True
-        lowered = without_timestamp.lower()
-        return (
-            lowered.startswith(UBUNTU_NOISY_PREFIXES)
-            or any(token.lower() in lowered for token in UBUNTU_NOISY_SUBSTRINGS)
-            or True
-        )
-
-    lowered = without_timestamp.lower()
-    return lowered.startswith(UBUNTU_NOISY_PREFIXES) or any(
-        token.lower() in lowered for token in UBUNTU_NOISY_SUBSTRINGS
-    )
-
-
-def filter_ubuntu_installer_output(text):
-    visible_lines = []
-    for line in text.splitlines(keepends=True):
-        if is_noisy_ubuntu_line(line):
-            continue
-        visible_lines.append(line)
-    return "".join(visible_lines)
-
-
-def stream_interactive_process(cmd, stop_text=None, output_filter=None):
+def stream_interactive_process(cmd, stop_text=None):
     master_fd, slave_fd = pty.openpty()
     old_tty = None
     process = None
@@ -245,21 +188,8 @@ def stream_interactive_process(cmd, stop_text=None, output_filter=None):
                     decoded_chunk = chunk.decode("utf-8", errors="ignore")
                     display_buffer += decoded_chunk
 
-                    if output_filter:
-                        complete_lines = re.split(r"(?<=\n)|(?<=\r)", display_buffer)
-                        if complete_lines and not complete_lines[-1].endswith(("\n", "\r")):
-                            display_buffer = complete_lines.pop()
-                        else:
-                            display_buffer = ""
-
-                        if complete_lines:
-                            filtered = output_filter("".join(complete_lines))
-                            if filtered:
-                                sys.stdout.write(filtered)
-                                sys.stdout.flush()
-                    else:
-                        sys.stdout.buffer.write(chunk)
-                        sys.stdout.buffer.flush()
+                    sys.stdout.buffer.write(chunk)
+                    sys.stdout.buffer.flush()
 
                     if stop_text and not detected_stop_text:
                         output_buffer = (output_buffer + decoded_chunk)[-4096:]
@@ -300,11 +230,6 @@ def stream_interactive_process(cmd, stop_text=None, output_filter=None):
                 return process.wait(), detected_stop_text
         return 130, detected_stop_text
     finally:
-        if output_filter and display_buffer:
-            filtered = output_filter(display_buffer)
-            if filtered:
-                sys.stdout.write(filtered)
-                sys.stdout.flush()
         if old_tty is not None:
             termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_tty)
         os.close(master_fd)

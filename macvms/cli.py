@@ -12,7 +12,6 @@ from .config import ISOS, VM_DIR, config_path, load_config, save_config, vm_path
 from .qemu import (
     build_install_qemu_cmd,
     build_start_qemu_cmd,
-    filter_ubuntu_installer_output,
     has_persistent_serial_support,
     stream_interactive_process,
 )
@@ -159,18 +158,12 @@ def install_vm():
     except RuntimeError as exc:
         console.print(f"[red]{exc}[/red]")
         return
-
-    if os_name == "debian":
-        console.print("[cyan]Debian installer will run on the serial console and persist serial GRUB settings.[/cyan]")
-        subprocess.run(qemu_cmd)
-        return
-
+    
     console.print("[cyan]Installer will boot directly on the serial console.[/cyan]")
-    console.print("[cyan]At the end of Ubuntu installation, macVMs will close the temporary install session automatically.[/cyan]")
+    console.print("[cyan]At the end of installation, macVMs will close the temporary install session automatically.[/cyan]")
     returncode, completed_install = stream_interactive_process(
         qemu_cmd,
-        stop_text="Please remove the installation medium, then press ENTER:",
-        output_filter=filter_ubuntu_installer_output,
+        stop_text="Please remove the installation medium, then press ENTER:"
     )
     if completed_install:
         console.print("[green]Installation session closed.[/green]")
@@ -248,12 +241,6 @@ def start_vm():
     if config.get("shared_folder"):
         console.print("[yellow]Shared folder is attached as 9p tag 'shared'.[/yellow]")
         console.print("[yellow]Mount it inside the guest if you need it.[/yellow]")
-    if config.get("os") == "debian" and not has_persistent_serial_support(config):
-        console.print("[red]This Debian VM was created before serial boot persistence was added.[/red]")
-        console.print("[red]Seeing only 'Welcome to GRUB!' is expected on this old install.[/red]")
-        console.print("[yellow]Create a new Debian VM to get full serial boot/install output automatically.[/yellow]")
-    elif config.get("os") != "debian":
-        console.print("[yellow]For non-Debian guests, persistent serial GRUB output depends on the guest OS configuration.[/yellow]")
 
     subprocess.run(build_start_qemu_cmd(config, disk))
 
@@ -284,18 +271,21 @@ def menu():
         console.print(Panel(BANNER))
 
         table = Table(show_header=False)
+        table.add_row("0", "Exit")
         table.add_row("1", "Install VM")
         table.add_row("2", "List VMs")
         table.add_row("3", "Start VM")
         table.add_row("4", "VM Info")
         table.add_row("5", "Delete VM")
-        table.add_row("6", "Exit")
 
         console.print(table)
 
         choice = console.input("\n[bold]> [/bold]").strip()
 
-        if choice == "1":
+
+        if choice == "0":
+            break
+        elif choice == "1":
             install_vm()
         elif choice == "2":
             list_vms()
@@ -305,8 +295,6 @@ def menu():
             info_vm()
         elif choice == "5":
             delete_vm()
-        elif choice == "6":
-            break
         else:
             console.print("[red]Invalid option[/red]")
 
