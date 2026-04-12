@@ -4,6 +4,8 @@ import subprocess
 import time
 import urllib.request
 
+import psutil
+
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from rich.table import Table
@@ -263,6 +265,51 @@ def delete_vm():
 
     shutil.rmtree(path)
     console.print("[green]VM deleted[/green]")
+
+
+def get_vms():
+    return [vm for vm in os.listdir(VM_DIR) if os.path.isdir(vm_path(vm))]
+
+
+def start_vm_noninteractive(name):
+    if not is_valid_vm_name(name) or not os.path.exists(config_path(name)):
+        return False
+
+    config = load_config(name)
+    disk = os.path.join(vm_path(name), config["disk"])
+
+    if not os.path.exists(disk):
+        return False
+
+    subprocess.Popen(build_start_qemu_cmd(config, disk))
+    return True
+
+
+def stop_vm(name):
+    # To stop a VM, we need to find the QEMU process and kill it
+    # This is a simple implementation; in a real app, you'd track PIDs
+    import psutil
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        if proc.info['name'] == 'qemu-system-x86_64':
+            cmdline = proc.info['cmdline']
+            if cmdline and any(name in arg for arg in cmdline):
+                proc.kill()
+                return True
+    return False
+
+
+def is_vm_running(name):
+    import psutil
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        if proc.info['name'] == 'qemu-system-x86_64':
+            cmdline = proc.info['cmdline']
+            if cmdline and any(name in arg for arg in cmdline):
+                # Se creato meno di 30 secondi fa, è booting
+                if time.time() - proc.create_time() < 30:
+                    return "booting"
+                else:
+                    return "running"
+    return "stopped"
 
 
 def menu():

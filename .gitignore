@@ -1,6 +1,9 @@
 /vms
 /isos
 /.venv
+/dist
+/build
+/.eggs
 __pycache__/
 *.pyc
 .DS_Store

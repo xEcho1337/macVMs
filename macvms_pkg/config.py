@@ -1,7 +1,7 @@
 import json
 import os
 
-BASE_DIR = os.getcwd()
+BASE_DIR = os.path.expanduser("~/macVMs")
 VM_DIR = os.path.join(BASE_DIR, "vms")
 ISO_DIR = os.path.join(BASE_DIR, "isos")
 
