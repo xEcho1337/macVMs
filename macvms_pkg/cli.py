@@ -6,6 +6,9 @@ import urllib.request
 
 import psutil
 
+import logging
+logging.basicConfig(filename=os.path.expanduser("~/macVMs/macvms.log"), level=logging.ERROR)
+
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from rich.table import Table
@@ -273,16 +276,24 @@ def get_vms():
 
 def start_vm_noninteractive(name):
     if not is_valid_vm_name(name) or not os.path.exists(config_path(name)):
+        logging.error(f"VM {name}: invalid name or config not found")
         return False
 
     config = load_config(name)
     disk = os.path.join(vm_path(name), config["disk"])
 
     if not os.path.exists(disk):
+        logging.error(f"VM {name}: disk not found at {disk}")
         return False
 
-    subprocess.Popen(build_start_qemu_cmd(config, disk))
-    return True
+    try:
+        cmd = build_start_qemu_cmd(config, disk)
+        logging.info(f"Starting VM {name} with cmd: {cmd}")
+        subprocess.Popen(cmd)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to start VM {name}: {e}")
+        return False
 
 
 def stop_vm(name):

@@ -1,6 +1,7 @@
 import os
 import rumps
 import subprocess
+import time
 from macvms_pkg.cli import get_vms, start_vm_noninteractive, stop_vm, is_vm_running
 
 
@@ -37,10 +38,12 @@ class MacVMsApp(rumps.App):
 
     def toggle_vm(self, sender):
         vm_name = sender.vm_name
-        if is_vm_running(vm_name):
+        if is_vm_running(vm_name) in ["running", "booting"]:
             stop_vm(vm_name)
         else:
-            start_vm_noninteractive(vm_name)
+            success = start_vm_noninteractive(vm_name)
+            if success:
+                time.sleep(2)  # Aspetta che il processo parta
         self.update_menu()
 
     def refresh_menu(self, _):

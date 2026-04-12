@@ -2,6 +2,7 @@ import os
 import pty
 import re
 import select
+import shutil
 import signal
 import subprocess
 import sys
@@ -128,8 +129,9 @@ def build_install_qemu_cmd(name, os_name, ram, cpu, disk, shared_path):
 
 
 def build_start_qemu_cmd(config, disk):
+    qemu_path = shutil.which('qemu-system-x86_64') or '/opt/homebrew/bin/qemu-system-x86_64'
     qemu_cmd = [
-        "qemu-system-x86_64",
+        qemu_path,
         "-accel", "tcg",
         "-m", f"{config['ram']}M",
         "-smp", str(config["cpu"]),
