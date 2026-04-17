@@ -1,6 +1,14 @@
+altgraph==0.17.5
+macholib==1.16.4
 markdown-it-py==4.0.0
 mdurl==0.1.2
+modulegraph==0.19.7
+packaging==26.0
+psutil==5.9.0
+py2app==0.28.10
 Pygments==2.20.0
+pyobjc-core==12.1
+pyobjc-framework-Cocoa==12.1
 rich==14.3.3
 rumps==0.4.0
-psutil==5.9.0
+setuptools==82.0.1
