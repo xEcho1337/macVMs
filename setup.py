@@ -4,7 +4,7 @@ APP = ['macvms.py']
 DATA_FILES = []
 OPTIONS = {
     'argv_emulation': True,
-    'packages': ['macvms_pkg'],
+    'packages': ['macvms'],
     'includes': ['rumps', 'psutil'],
     'plist': {
         'LSUIElement': True,

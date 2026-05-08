@@ -1,5 +1,5 @@
 import sys
-from macvms_pkg.cli import menu
+from macvms.cli import menu
 from macvms_menu import MacVMsApp
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import os
 import rumps
 import subprocess
 import time
-from macvms_pkg.cli import get_vms, start_vm_noninteractive, stop_vm, is_vm_running
+from macvms.cli import get_vms, start_vm_noninteractive, stop_vm, is_vm_running
 
 
 class MacVMsApp(rumps.App):

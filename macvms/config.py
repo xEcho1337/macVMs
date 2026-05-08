@@ -87,6 +87,10 @@ def config_path(name):
     return os.path.join(vm_path(name), "config.json")
 
 
+def qemu_config_path(name):
+    return os.path.join(vm_path(name), "qemu.conf")
+
+
 def load_config(name):
     with open(config_path(name), "r", encoding="utf-8") as f:
         return json.load(f)

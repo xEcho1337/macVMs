@@ -1,24 +1,31 @@
 import os
 import shutil
 import subprocess
+import threading
 import time
 import urllib.request
 
 import psutil
 
 import logging
-logging.basicConfig(filename=os.path.expanduser("~/macVMs/macvms.log"), level=logging.ERROR)
+logging.basicConfig(filename=os.path.expanduser("~/macVMs/macvms.log"), level=logging.INFO)
 
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from rich.table import Table
 
-from .config import ISOS, VM_DIR, config_path, load_config, save_config, vm_path
+from .config import ISOS, VM_DIR, config_path, load_config, qemu_config_path, save_config, vm_path
 from .qemu import (
     build_install_qemu_cmd,
     build_start_qemu_cmd,
+    ensure_network_identity,
+    ensure_qemu_config,
+    find_vm_ip_by_mac,
     has_persistent_serial_support,
+    parse_qemu_config,
+    resolve_network_args,
     stream_interactive_process,
+    wait_for_vm_ip,
 )
 from .ui import BANNER, console
 
@@ -151,7 +158,9 @@ def install_vm():
         "shared_folder": shared_path,
         "serial_bootstrap_version": 1,
     }
+    ensure_network_identity(config)
     save_config(name, config)
+    ensure_qemu_config(name)
 
     console.print("[green]Starting installer...[/green]")
     if shared_path:
@@ -225,7 +234,79 @@ def info_vm():
     for k, v in data.items():
         table.add_row(k, str(v))
 
+    qemu_conf = qemu_config_path(name)
+    if os.path.exists(qemu_conf):
+        table.add_row("qemu_conf", qemu_conf)
+        try:
+            qemu_overrides = parse_qemu_config(name)
+            if qemu_overrides:
+                for key, value in sorted(qemu_overrides.items()):
+                    table.add_row(f"qemu.{key}", value)
+        except ValueError as exc:
+            table.add_row("qemu_conf_error", str(exc))
+
     console.print(table)
+
+
+def prepare_vm_config(name):
+    config = load_config(name)
+    changed = ensure_network_identity(config)
+    if changed:
+        save_config(name, config)
+    return config
+
+
+def announce_vm_network(name, network_mode, mac_address, log_only=False):
+    if network_mode == "user":
+        message = "SSH forwarding remains available at localhost:2222 unless overridden in qemu.conf."
+        if log_only:
+            logging.info("VM %s: %s", name, message)
+        else:
+            console.print(f"[cyan]{message}[/cyan]")
+        return
+
+    if not mac_address:
+        message = f"VM {name}: no guest MAC address available, skipping IP discovery."
+        if log_only:
+            logging.warning(message)
+        else:
+            console.print(f"[yellow]{message}[/yellow]")
+        return
+
+    current_ip = find_vm_ip_by_mac(mac_address)
+    if current_ip:
+        message = f"Detected VM IP for {name}: {current_ip}"
+        if log_only:
+            logging.info(message)
+        else:
+            console.print(f"[green]{message}[/green]")
+        return
+
+    waiting_message = (
+        f"Waiting for DHCP lease for {name} on {network_mode} "
+        f"(MAC {mac_address})..."
+    )
+    if log_only:
+        logging.info(waiting_message)
+    else:
+        console.print(f"[cyan]{waiting_message}[/cyan]")
+
+    ip_address = wait_for_vm_ip(mac_address)
+    if ip_address:
+        message = f"Detected VM IP for {name}: {ip_address}"
+        if log_only:
+            logging.info(message)
+        else:
+            console.print(f"[green]{message}[/green]")
+    else:
+        message = (
+            f"Could not determine the DHCP IP for {name}. "
+            "The guest may still be booting, using a static IP, or not using the configured MAC for DHCP."
+        )
+        if log_only:
+            logging.warning(message)
+        else:
+            console.print(f"[yellow]{message}[/yellow]")
 
 
 def start_vm():
@@ -235,7 +316,7 @@ def start_vm():
         console.print("[red]VM not found[/red]")
         return
 
-    config = load_config(name)
+    config = prepare_vm_config(name)
     disk = os.path.join(vm_path(name), config["disk"])
 
     if not os.path.exists(disk):
@@ -246,8 +327,30 @@ def start_vm():
     if config.get("shared_folder"):
         console.print("[yellow]Shared folder is attached as 9p tag 'shared'.[/yellow]")
         console.print("[yellow]Mount it inside the guest if you need it.[/yellow]")
+    ensure_qemu_config(name)
 
-    subprocess.run(build_start_qemu_cmd(config, disk))
+    try:
+        network_info = resolve_network_args(config)
+        cmd = build_start_qemu_cmd(config, disk)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return
+
+    if network_info["mode"] == "vmnet-bridged":
+        qemu_overrides = parse_qemu_config(name)
+        console.print(
+            f"[cyan]Using bridged networking via host interface {qemu_overrides.get('ifname', '?')}.[/cyan]"
+        )
+
+    network_thread = threading.Thread(
+        target=announce_vm_network,
+        args=(name, network_info["mode"], network_info["mac_address"]),
+        daemon=True,
+    )
+    network_thread.start()
+
+    process = subprocess.Popen(cmd)
+    process.wait()
 
 
 def delete_vm():
@@ -279,7 +382,7 @@ def start_vm_noninteractive(name):
         logging.error(f"VM {name}: invalid name or config not found")
         return False
 
-    config = load_config(name)
+    config = prepare_vm_config(name)
     disk = os.path.join(vm_path(name), config["disk"])
 
     if not os.path.exists(disk):
@@ -287,10 +390,20 @@ def start_vm_noninteractive(name):
         return False
 
     try:
+        ensure_qemu_config(name)
+        network_info = resolve_network_args(config)
         cmd = build_start_qemu_cmd(config, disk)
         logging.info(f"Starting VM {name} with cmd: {cmd}")
         subprocess.Popen(cmd)
+        threading.Thread(
+            target=announce_vm_network,
+            args=(name, network_info["mode"], network_info["mac_address"], True),
+            daemon=True,
+        ).start()
         return True
+    except ValueError as e:
+        logging.error(f"Failed to start VM {name}: {e}")
+        return False
     except Exception as e:
         logging.error(f"Failed to start VM {name}: {e}")
         return False
